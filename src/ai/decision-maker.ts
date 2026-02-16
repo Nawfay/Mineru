@@ -41,35 +41,40 @@ export async function determineAction(
     ${recentHistory.join('\n')}
 
     INSTRUCTIONS:
-    1. Look at the screenshot. Identify the element that helps you reach the goal (or close a popup).
-    2. If a popup/modal is blocking the view, your priority is to CLOSE it (look for an 'X' or 'Close' button).
-    3. INTERACTING WITH INPUTS:
+    1. NAVIGATION PRIORITY: 
+       - If you know the exact URL you need to visit, use action "navigate" with the full URL (e.g., "https://clutch.ca")
+       - If you see a search bar, you can also use it to navigate to websites
+       - Direct navigation is fastest when you know where to go
+    2. Look at the screenshot. Identify the element that helps you reach the goal (or close a popup).
+    3. If a popup/modal is blocking the view, your priority is to CLOSE it (look for an 'X' or 'Close' button).
+    4. INTERACTING WITH INPUTS:
        - For text/number inputs: use action "type" with the elementId and value
+       - After typing into a search box or form field, use action "press_enter" to submit (no elementId needed)
        - For combobox/button elements (role="combobox"): use action "click" to open them, then click the option you want
        - DO NOT try to type into buttons or comboboxes - always click them
-    4. SELECTING FROM DROPDOWNS:
+    5. SELECTING FROM DROPDOWNS:
        - For select elements (native dropdowns), use action "select" with the elementId and the value/label you want
        - For custom dropdowns (comboboxes, scrollable lists):
          a) First CLICK the combobox button to open the dropdown
          b) If needed, scroll the container using "scroll_element" to find your option
          c) Then CLICK the option you want (like "2021")
        - Example workflow: {"action": "click", "elementId": 140} -> {"action": "click", "elementId": 27}
-    5. SCROLLING STRATEGY:
+    6. SCROLLING STRATEGY:
        - If the target option (like "2021") is hidden in a scrollable list, use "scroll_element" on the BLUE tag (S:XX) to scroll that container
        - The visible content of scrollable areas is shown in the DOM summary - use this to know if you need to scroll
        - DO NOT use global scroll if a sidebar/modal exists; scroll the sidebar/modal directly using its BLUE tag
        - To scroll the MAIN PAGE: use action "scroll" with direction "down" or "up"
        - To scroll a SPECIFIC CONTAINER (modal, sidebar, dropdown list): use action "scroll_element" with the elementId (from BLUE tag) and direction "down" or "up"
-    6. Use the DOM element details above to understand what each elemnt does (text, placeholder, aria-label, role, etc.)
-    7. Return JSON ONLY (no markdown):
+    7. Use the DOM element details above to understand what each elemnt does (text, placeholder, aria-label, role, etc.)
+    8. Return JSON ONLY (no markdown):
     
     {
         "thought": "brief reasoning",
-        "action": "click" | "type" | "select" | "navigate" | "scroll" | "scroll_element" | "finished",
+        "action": "click" | "type" | "select" | "navigate" | "scroll" | "scroll_element" | "press_enter" | "finished",
         "elementId": number (the number in the red/blue box - required for click/type/select/scroll_element),
         "value": string (if typing or selecting),
         "direction": "down" | "up" (if scrolling),
-        "url": string (if navigating)
+        "url": string (if navigating - use full URL like "https://example.com")
     }
     `;
 

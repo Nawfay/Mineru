@@ -9,16 +9,30 @@ export async function executeAction(
     decision: AgentDecision,
     actionHistory: string[]
 ): Promise<void> {
+    // track if we should scroll to top after this action
+    let shouldScrollToTop = false;
+
     try {
         if (decision.action === 'navigate') {
             await page.goto(decision.url!);
             actionHistory.push(`Navigated to ${decision.url}`);
+            shouldScrollToTop = true;
         } 
         else if (decision.action === 'click') {
             const selector = `[data-agent-persist="${decision.elementId}"]`;
             if (await page.locator(selector).count() > 0) {
                 await humanClick(page, selector);
                 actionHistory.push(`Clicked ID ${decision.elementId} (${decision.thought})`);
+                
+                // scroll to top after clicking filters, buttons, or dropdowns
+                const element = page.locator(selector).first();
+                const tagName = await element.evaluate(el => el.tagName.toLowerCase());
+                const role = await element.evaluate(el => el.getAttribute('role'));
+                
+                // likely a filter or form control
+                if (tagName === 'button' || role === 'combobox' || role === 'button') {
+                    shouldScrollToTop = true;
+                }
             } else {
                 console.log("Element missing after tag removal. Retrying...");
             }
@@ -48,6 +62,7 @@ export async function executeAction(
                     console.log("Element is not typeable, clicking instead");
                     await humanClick(page, selector);
                     actionHistory.push(`Clicked ID ${decision.elementId} (not a typeable element)`);
+                    shouldScrollToTop = true;
                 } else {
                     throw err;
                 }
@@ -57,6 +72,15 @@ export async function executeAction(
             const selector = `[data-agent-persist="${decision.elementId}"]`;
             await humanSelect(page, selector, decision.value!);
             actionHistory.push(`Selected "${decision.value}" in dropdown ID ${decision.elementId}`);
+            shouldScrollToTop = true;
+        }
+        else if (decision.action === 'press_enter') {
+            // press enter key to submit forms or search
+            await page.keyboard.press('Enter');
+            await randomDelay(500, 1000);
+            actionHistory.push(`Pressed Enter key`);
+            console.log("Pressed Enter to submit");
+            shouldScrollToTop = true;
         }
         else if (decision.action === 'scroll_element') {
             const selector = `[data-agent-persist="${decision.elementId}"]`;
@@ -77,6 +101,7 @@ export async function executeAction(
             } else {
                 console.log("Scroll container not found");
             }
+            // don't scroll to top for container scrolling
         }
         else if (decision.action === 'scroll') {
             const direction = decision.direction || 'down';
@@ -89,6 +114,23 @@ export async function executeAction(
             console.log(`Scrolled ${direction} (main page)`);
             
             await randomDelay(500, 1000);
+            // don't scroll to top for intentional scrolling
+        }
+
+        // if this was a filter-type action, scroll to top and wait for content
+        if (shouldScrollToTop) {
+            console.log("Waiting for page to update after action...");
+            
+            // wait for any network activity to settle
+            await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {
+                console.log("Network didn't idle, continuing anyway");
+            });
+            
+            // scroll to top to see new results
+            await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+            await randomDelay(800, 1200);
+            
+            console.log("Scrolled to top after filter action");
         }
     } catch (err) {
         console.error("Action failed:", err);
