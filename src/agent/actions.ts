@@ -1,0 +1,78 @@
+import { Page } from 'playwright';
+import { humanClick, humanType } from '../browser/interactions';
+import { randomDelay } from '../utils/delays';
+import { AgentDecision } from '../types';
+
+// execute the action decided by the ai
+export async function executeAction(
+    page: Page,
+    decision: AgentDecision,
+    actionHistory: string[]
+): Promise<void> {
+    try {
+        if (decision.action === 'navigate') {
+            await page.goto(decision.url!);
+            actionHistory.push(`Navigated to ${decision.url}`);
+        } 
+        else if (decision.action === 'click') {
+            const selector = `[data-agent-persist="${decision.elementId}"]`;
+            if (await page.locator(selector).count() > 0) {
+                await humanClick(page, selector);
+                actionHistory.push(`Clicked ID ${decision.elementId} (${decision.thought})`);
+            } else {
+                console.log("Element missing after tag removal. Retrying...");
+            }
+        } 
+        else if (decision.action === 'type') {
+            const selector = `[data-agent-persist="${decision.elementId}"]`;
+            await humanType(page, selector, decision.value!);
+            
+            // trigger events so the page knows we typed
+            await page.evaluate((sel) => {
+                const el = document.querySelector(sel);
+                if (el) {
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    el.dispatchEvent(new Event('blur', { bubbles: true }));
+                }
+            }, selector);
+            
+            await randomDelay(200, 400);
+            actionHistory.push(`Typed "${decision.value}" into ID ${decision.elementId}`);
+        }
+        else if (decision.action === 'scroll_element') {
+            const selector = `[data-agent-persist="${decision.elementId}"]`;
+            const element = page.locator(selector).first();
+            
+            if (await element.count() > 0) {
+                // hover over element first
+                await element.hover();
+                
+                // scroll up or down
+                const deltaY = decision.direction === 'up' ? -400 : 400;
+                
+                await element.evaluate((el, dy) => el.scrollBy({ top: dy, behavior: 'smooth' }), deltaY);
+                
+                await randomDelay(1000, 1500);
+                actionHistory.push(`Scrolled containr ${decision.elementId} ${decision.direction}`);
+                console.log(`Scrolled container ${decision.elementId} ${decision.direction}`);
+            } else {
+                console.log("Scroll container not found");
+            }
+        }
+        else if (decision.action === 'scroll') {
+            const direction = decision.direction || 'down';
+            const scrollAmount = direction === 'down' ? 800 : -800;
+            
+            await page.evaluate((amount) => {
+                window.scrollBy({ top: amount, behavior: 'smooth' });
+            }, scrollAmount);
+            actionHistory.push(`Scrolled ${direction} (main page)`);
+            console.log(`Scrolled ${direction} (main page)`);
+            
+            await randomDelay(500, 1000);
+        }
+    } catch (err) {
+        console.error("Action failed:", err);
+    }
+}
