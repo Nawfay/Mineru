@@ -1,7 +1,7 @@
 {
-  "name": "yellowcake",
+  "name": "mineru",
   "version": "1.0.0",
-  "description": "hassan",
+  "description": "Browser automation agent using vision models",
   "license": "ISC",
   "author": "",
   "type": "commonjs",
