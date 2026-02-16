@@ -69,7 +69,7 @@ export async function tagPage(page: Page): Promise<DOMElement[]> {
         };
 
         // tag interactive elements in red
-        const interactives = document.querySelectorAll('button, a, input, select, textarea, [role="button"], [role="link"]');
+        const interactives = document.querySelectorAll('button, a, input, select, textarea, [role="button"], [role="link"], [role="option"], li[role="presentation"]');
         interactives.forEach((el) => {
             const entry = createTag(el, '#ff0000');
             if (entry) {
@@ -81,7 +81,8 @@ export async function tagPage(page: Page): Promise<DOMElement[]> {
                     inputType: (el as HTMLInputElement).type || '',
                     value: (el as HTMLInputElement).value || '',
                     ariaLabel: el.getAttribute('aria-label') || '',
-                    title: el.getAttribute('title') || ''
+                    title: el.getAttribute('title') || '',
+                    role: el.getAttribute('role') || ''
                 });
             }
         });
@@ -96,11 +97,21 @@ export async function tagPage(page: Page): Promise<DOMElement[]> {
                 const entry = createTag(el, '#0000ff', 'S:');
                 if (entry) {
                     const htmlEl = el as HTMLElement;
+                    
+                    // get visible text content from scrollable area
+                    let visibleText = '';
+                    const children = Array.from(htmlEl.children);
+                    if (children.length > 0) {
+                        // get first few visible items
+                        visibleText = children.slice(0, 5).map(c => (c as HTMLElement).innerText?.trim()).filter(t => t).join(', ');
+                    }
+                    
                     map.push({
                         ...entry,
                         scrollHeight: el.scrollHeight,
                         clientHeight: el.clientHeight,
-                        className: htmlEl.className || ''
+                        className: htmlEl.className || '',
+                        visibleContent: visibleText.substring(0, 100)
                     });
                 }
             }

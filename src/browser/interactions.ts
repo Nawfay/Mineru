@@ -44,3 +44,18 @@ export async function humanType(page: Page, selector: string, text: string) {
     await element.pressSequentially(text, { delay: 75 });
     await randomDelay(200, 400);
 }
+
+// select from native dropdown (select element)
+export async function humanSelect(page: Page, selector: string, value: string) {
+    const element = page.locator(selector).first();
+    
+    await element.scrollIntoViewIfNeeded();
+    await randomDelay(300, 700);
+    
+    // playwright handles native dropdowns automatically
+    // you can select by value, label, or index
+    await element.selectOption(value);
+    
+    await randomDelay(200, 400);
+}
+

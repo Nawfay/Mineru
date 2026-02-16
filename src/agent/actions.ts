@@ -1,5 +1,5 @@
 import { Page } from 'playwright';
-import { humanClick, humanType } from '../browser/interactions';
+import { humanClick, humanType, humanSelect } from '../browser/interactions';
 import { randomDelay } from '../utils/delays';
 import { AgentDecision } from '../types';
 
@@ -25,20 +25,38 @@ export async function executeAction(
         } 
         else if (decision.action === 'type') {
             const selector = `[data-agent-persist="${decision.elementId}"]`;
-            await humanType(page, selector, decision.value!);
+            const element = page.locator(selector).first();
             
-            // trigger events so the page knows we typed
-            await page.evaluate((sel) => {
-                const el = document.querySelector(sel);
-                if (el) {
-                    el.dispatchEvent(new Event('input', { bubbles: true }));
-                    el.dispatchEvent(new Event('change', { bubbles: true }));
-                    el.dispatchEvent(new Event('blur', { bubbles: true }));
-                }
-            }, selector);
+            // check if this is actually a typeable element
+            const tagName = await element.evaluate(el => el.tagName.toLowerCase());
+            const role = await element.evaluate(el => el.getAttribute('role'));
             
-            await randomDelay(200, 400);
-            actionHistory.push(`Typed "${decision.value}" into ID ${decision.elementId}`);
+            // if it's a combobox or button, click it instead of typing
+            if (role === 'combobox' || tagName === 'button') {
+                console.log("Element is a combobox/button, clicking instead of typing");
+                await humanClick(page, selector);
+                actionHistory.push(`Clicked combobox ID ${decision.elementId} (tried to type but it's not an input)`);
+            } else {
+                await humanType(page, selector, decision.value!);
+                
+                // trigger events so the page knows we typed
+                await page.evaluate((sel) => {
+                    const el = document.querySelector(sel);
+                    if (el) {
+                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                        el.dispatchEvent(new Event('blur', { bubbles: true }));
+                    }
+                }, selector);
+                
+                await randomDelay(200, 400);
+                actionHistory.push(`Typed "${decision.value}" into ID ${decision.elementId}`);
+            }
+        }
+        else if (decision.action === 'select') {
+            const selector = `[data-agent-persist="${decision.elementId}"]`;
+            await humanSelect(page, selector, decision.value!);
+            actionHistory.push(`Selected "${decision.value}" in dropdown ID ${decision.elementId}`);
         }
         else if (decision.action === 'scroll_element') {
             const selector = `[data-agent-persist="${decision.elementId}"]`;
