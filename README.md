@@ -1,6 +1,6 @@
 # Mineru
 
-Autonomous web navigation agent using Playwright and Groq Llama Vision.
+Autonomous web navigation agent using Playwright and Llama Vision.
 
 ## Setup
 
