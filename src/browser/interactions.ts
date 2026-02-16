@@ -43,6 +43,10 @@ export async function humanType(page: Page, selector: string, text: string) {
     // type character by character
     await element.pressSequentially(text, { delay: 75 });
     await randomDelay(200, 400);
+    
+    // deselect by clicking elsewhere or blurring (nneeded for some websites)
+    await element.blur();
+    await randomDelay(100, 200);
 }
 
 // select from native dropdown (select element)
