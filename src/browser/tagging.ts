@@ -26,10 +26,14 @@ export async function tagPage(page: Page): Promise<DOMElement[]> {
             if (rect.top < 0 && rect.bottom < 0) return null;
 
             // check if element is occluded by something else
+            // but skip occlusion check for elements inside dropdowns/menus
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
             const topEl = document.elementFromPoint(centerX, centerY);
-            if (topEl && !el.contains(topEl) && !topEl.contains(el)) return null;
+            
+            // allow elements in dropdown menus even if occluded
+            const isInDropdown = el.closest('[role="menu"], [role="listbox"], .dropdown-menu, [class*="dropdown"]');
+            if (!isInDropdown && topEl && !el.contains(topEl) && !topEl.contains(el)) return null;
 
             // reuse existing id or create new one
             let elementId: number;
@@ -69,7 +73,7 @@ export async function tagPage(page: Page): Promise<DOMElement[]> {
         };
 
         // tag interactive elements in red
-        const interactives = document.querySelectorAll('button, a, input, select, textarea, [role="button"], [role="link"], [role="option"], li[role="presentation"]');
+        const interactives = document.querySelectorAll('button, a, input, select, textarea, [role="button"], [role="link"], [role="option"], [role="menuitem"], li[role="presentation"]');
         interactives.forEach((el) => {
             const entry = createTag(el, '#ff0000');
             if (entry) {

@@ -41,10 +41,13 @@ export async function determineAction(
     ${recentHistory.join('\n')}
 
     INSTRUCTIONS:
-    1. NAVIGATION PRIORITY: 
-       - If you know the exact URL you need to visit, use action "navigate" with the full URL (e.g., "https://clutch.ca")
-       - If you see a search bar, you can also use it to navigate to websites
-       - Direct navigation is fastest when you know where to go
+    1. NAVIGATION PRIORITY (IN ORDER OF PREFERENCE):
+       a) SEARCH BAR FIRST: If you see a search bar or search input on the page, ALWAYS use it to navigate or search. Type the website name or search query, then press enter.
+       b) Direct URL: If no search bar is available and you know the exact URL, use action "goToURL" with the full URL
+       c) Clicking links: Only as a last resort if neither search bar nor direct URL works
+       
+       IMPORTANT: Search bars are the MOST RELIABLE way to navigate. Use them whenever available!
+       
     2. Look at the screenshot. Identify the element that helps you reach the goal (or close a popup).
     3. If a popup/modal is blocking the view, your priority is to CLOSE it (look for an 'X' or 'Close' button).
     4. INTERACTING WITH INPUTS:
@@ -70,11 +73,11 @@ export async function determineAction(
     
     {
         "thought": "brief reasoning",
-        "action": "click" | "type" | "select" | "navigate" | "scroll" | "scroll_element" | "press_enter" | "finished",
+        "action": "click" | "type" | "select" | "goToURL" | "scroll" | "scroll_element" | "press_enter" | "finished",
         "elementId": number (the number in the red/blue box - required for click/type/select/scroll_element),
         "value": string (if typing or selecting),
         "direction": "down" | "up" (if scrolling),
-        "url": string (if navigating - use full URL like "https://example.com")
+        "url": string (if using goToURL - use full URL like "https://example.com")
     }
     `;
 

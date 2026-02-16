@@ -19,7 +19,7 @@ export interface DOMElement {
 // what the ai decides to do
 export interface AgentDecision {
     thought: string;
-    action: 'click' | 'type' | 'select' | 'navigate' | 'scroll' | 'scroll_element' | 'press_enter' | 'finished' | 'error';
+    action: 'click' | 'type' | 'select' | 'navigate' | 'scroll' | 'scroll_element' | 'press_enter' | 'goToURL' | 'finished' | 'error';
     elementId?: number;
     value?: string;
     direction?: 'up' | 'down';

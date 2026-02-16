@@ -1,6 +1,7 @@
 import { Page } from 'playwright';
 import { tagPage, removeTags } from '../browser/tagging';
 import { determineAction } from '../ai/decision-maker';
+import { determineStartingPage } from '../ai/starting-prompt';
 import { executeAction } from './actions';
 import { createSessionDir, saveDebugData } from '../utils/debug';
 import { randomDelay } from '../utils/delays';
@@ -14,8 +15,12 @@ export async function runAgent(page: Page, goal: string): Promise<void> {
     console.log("Agent starting...");
     createSessionDir();
     
+    // let ai decide the best starting page
+    console.log("Determining best starting page...");
+    const startingUrl = await determineStartingPage(goal);
+    
     // navigate to starting page
-    await page.goto('https://www.google.com');
+    await page.goto(startingUrl);
 
     while (stepCount < MAX_STEPS) {
         stepCount++;

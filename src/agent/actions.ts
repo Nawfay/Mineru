@@ -13,7 +13,7 @@ export async function executeAction(
     let shouldScrollToTop = false;
 
     try {
-        if (decision.action === 'navigate') {
+        if (decision.action === 'navigate' || decision.action === 'goToURL') {
             await page.goto(decision.url!);
             actionHistory.push(`Navigated to ${decision.url}`);
             shouldScrollToTop = true;
