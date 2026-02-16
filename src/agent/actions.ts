@@ -27,16 +27,7 @@ export async function executeAction(
             const selector = `[data-agent-persist="${decision.elementId}"]`;
             const element = page.locator(selector).first();
             
-            // check if this is actually a typeable element
-            const tagName = await element.evaluate(el => el.tagName.toLowerCase());
-            const role = await element.evaluate(el => el.getAttribute('role'));
-            
-            // if it's a combobox or button, click it instead of typing
-            if (role === 'combobox' || tagName === 'button') {
-                console.log("Element is a combobox/button, clicking instead of typing");
-                await humanClick(page, selector);
-                actionHistory.push(`Clicked combobox ID ${decision.elementId} (tried to type but it's not an input)`);
-            } else {
+            try {
                 await humanType(page, selector, decision.value!);
                 
                 // trigger events so the page knows we typed
@@ -51,6 +42,15 @@ export async function executeAction(
                 
                 await randomDelay(200, 400);
                 actionHistory.push(`Typed "${decision.value}" into ID ${decision.elementId}`);
+            } catch (err: any) {
+                // only if typing fails, check if it's a combobox and click instead
+                if (err.message && err.message.includes('not an <input>')) {
+                    console.log("Element is not typeable, clicking instead");
+                    await humanClick(page, selector);
+                    actionHistory.push(`Clicked ID ${decision.elementId} (not a typeable element)`);
+                } else {
+                    throw err;
+                }
             }
         }
         else if (decision.action === 'select') {

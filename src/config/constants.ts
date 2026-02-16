@@ -7,5 +7,5 @@ export const USER_AGENTS = [
 ];
 
 // max steps before giving up
-export const MAX_STEPS = 15;
+export const MAX_STEPS = 25;
 export const VIEWPORT = { width: 1440, height: 900 };
