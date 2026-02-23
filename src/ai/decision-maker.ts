@@ -1,4 +1,4 @@
-import { groq } from './groq-client';
+import { openrouter } from './openrouter-client';
 import { DOMElement, DecisionResult } from '../types';
 
 // use vision model to decide what to do next
@@ -82,8 +82,8 @@ export async function determineAction(
     `;
 
     try {
-        const completion = await groq.chat.completions.create({
-            model: "meta-llama/llama-4-maverick-17b-128e-instruct",
+        const completion = await openrouter.chat.completions.create({
+            model: "x-ai/grok-4.1-fast",
             messages: [
                 {
                     role: "user",
@@ -105,7 +105,7 @@ export async function determineAction(
             response: response
         };
     } catch (e) {
-        console.error("Groq Error:", e);
+        console.error("OpenRouter Error:", e);
         return { 
             decision: { action: "error", thought: `Error: ${e}` },
             prompt: prompt,

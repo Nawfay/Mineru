@@ -17,6 +17,10 @@ export function createSessionDir(): string {
     return sessionDir;
 }
 
+export function getSessionDir(): string | null {
+    return sessionDir;
+}
+
 // save all debug info for this step
 export function saveDebugData(
     stepCount: number,
