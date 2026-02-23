@@ -32,7 +32,7 @@ export async function tagPage(page: Page): Promise<DOMElement[]> {
             const topEl = document.elementFromPoint(centerX, centerY);
             
             // allow elements in dropdown menus even if occluded
-            const isInDropdown = el.closest('[role="menu"], [role="listbox"], .dropdown-menu, [class*="dropdown"]');
+            const isInDropdown = el.closest('[role="menu"], [role="listbox"], .dropdown-menu, [class*="dropdown"], .ui-autocomplete, .ui-menu, [class*="autocomplete"], [class*="suggestion"]');
             if (!isInDropdown && topEl && !el.contains(topEl) && !topEl.contains(el)) return null;
 
             // reuse existing id or create new one
@@ -73,12 +73,12 @@ export async function tagPage(page: Page): Promise<DOMElement[]> {
         };
 
         // tag interactive elements in red
-        const interactives = document.querySelectorAll('button, a, input, select, textarea, [role="button"], [role="link"], [role="option"], [role="menuitem"], li[role="presentation"]');
+        const interactives = document.querySelectorAll('button, a, input, select, textarea, [role="button"], [role="link"], [role="option"], [role="menuitem"], li[role="presentation"], .ui-menu-item, [class*="autocomplete"] li, [role="listbox"] [role="option"]');
         interactives.forEach((el) => {
             const entry = createTag(el, '#ff0000');
             if (entry) {
                 const htmlEl = el as HTMLElement;
-                map.push({
+                const data: any = {
                     ...entry,
                     text: htmlEl.innerText?.substring(0, 50) || '',
                     placeholder: (el as HTMLInputElement).placeholder || '',
@@ -87,7 +87,18 @@ export async function tagPage(page: Page): Promise<DOMElement[]> {
                     ariaLabel: el.getAttribute('aria-label') || '',
                     title: el.getAttribute('title') || '',
                     role: el.getAttribute('role') || ''
-                });
+                };
+                
+                // capture available options for <select> elements
+                if (el.tagName.toLowerCase() === 'select') {
+                    const opts = Array.from((el as HTMLSelectElement).options)
+                        .map(o => o.text.trim())
+                        .filter(t => t)
+                        .slice(0, 30); // cap at 30 to avoid huge payloads
+                    data.options = opts;
+                }
+                
+                map.push(data);
             }
         });
 

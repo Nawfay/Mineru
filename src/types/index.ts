@@ -14,6 +14,7 @@ export interface DOMElement {
     clientHeight?: number;
     className?: string;
     visibleContent?: string;
+    options?: string[];
 }
 
 // what the ai decides to do

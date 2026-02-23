@@ -15,8 +15,11 @@ export async function humanClick(page: Page, selector: string) {
     await element.click();
 }
 
+const AUTOCOMPLETE_SELECTORS = '.ui-autocomplete, [role="listbox"], [class*="autocomplete"], [class*="suggestion"], .tt-menu, .awesomplete > ul, .pac-container';
+
 // type like a human with delays
-export async function humanType(page: Page, selector: string, text: string) {
+// automatically detects if an autocomplete dropdown appears and skips blur if so
+export async function humanType(page: Page, selector: string, text: string): Promise<boolean> {
     const element = page.locator(selector).first();
     
     await element.scrollIntoViewIfNeeded();
@@ -44,9 +47,20 @@ export async function humanType(page: Page, selector: string, text: string) {
     await element.pressSequentially(text, { delay: 75 });
     await randomDelay(200, 400);
     
-    // deselect by clicking elsewhere or blurring (nneeded for some websites)
-    await element.blur();
-    await randomDelay(100, 200);
+    // check if an autocomplete dropdown appeared
+    let autocompleteDetected = false;
+    try {
+        await page.waitForSelector(AUTOCOMPLETE_SELECTORS, { state: 'visible', timeout: 2000 });
+        autocompleteDetected = true;
+        console.log('Autocomplete dropdown detected — skipping blur to keep it open');
+        await randomDelay(300, 600);
+    } catch {
+        // no dropdown appeared, normal input — blur as usual
+        await element.blur();
+        await randomDelay(100, 200);
+    }
+    
+    return autocompleteDetected;
 }
 
 // select from native dropdown (select element)

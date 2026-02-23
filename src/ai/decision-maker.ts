@@ -24,6 +24,7 @@ export async function determineAction(
         if (el.ariaLabel) parts.push(`aria-label="${el.ariaLabel}"`);
         if (el.title) parts.push(`title="${el.title}"`);
         if (el.role) parts.push(`role="${el.role}"`);
+        if (el.options && el.options.length > 0) parts.push(`options=[${el.options.join(', ')}]`);
         return parts.join(' ');
     }).join('\n');
 
@@ -51,12 +52,12 @@ export async function determineAction(
     2. Look at the screenshot. Identify the element that helps you reach the goal (or close a popup).
     3. If a popup/modal is blocking the view, your priority is to CLOSE it (look for an 'X' or 'Close' button).
     4. INTERACTING WITH INPUTS:
-       - For text/number inputs: use action "type" with the elementId and value
+       - For text/number inputs: use action "type" with the elementId and value. If an autocomplete dropdown appears after typing, the page will be re-tagged automatically so you can click a suggestion in the next step.
        - After typing into a search box or form field, use action "press_enter" to submit (no elementId needed)
        - For combobox/button elements (role="combobox"): use action "click" to open them, then click the option you want
        - DO NOT try to type into buttons or comboboxes - always click them
     5. SELECTING FROM DROPDOWNS:
-       - For select elements (native dropdowns), use action "select" with the elementId and the value/label you want
+       - For <select> elements (tag="select" in DOM summary): ALWAYS use action "select" with the elementId and the label text of the option you want. NEVER click a <select> — it opens a native OS menu that cannot be seen or interacted with. The available options are listed in the DOM summary.
        - For custom dropdowns (comboboxes, scrollable lists):
          a) First CLICK the combobox button to open the dropdown
          b) If needed, scroll the container using "scroll_element" to find your option
