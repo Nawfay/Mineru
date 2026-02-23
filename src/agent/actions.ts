@@ -21,17 +21,27 @@ export async function executeAction(
         else if (decision.action === 'click') {
             const selector = `[data-agent-persist="${decision.elementId}"]`;
             if (await page.locator(selector).count() > 0) {
-                await humanClick(page, selector);
-                actionHistory.push(`Clicked ID ${decision.elementId} (${decision.thought})`);
-                
-                // scroll to top after clicking filters, buttons, or dropdowns
-                const element = page.locator(selector).first();
-                const tagName = await element.evaluate(el => el.tagName.toLowerCase());
-                const role = await element.evaluate(el => el.getAttribute('role'));
-                
-                // likely a filter or form control
-                if (tagName === 'button' || role === 'combobox' || role === 'button') {
+                // if the ai tries to click a <select>, use selectOption instead
+                const tagName = await page.locator(selector).first().evaluate(el => el.tagName.toLowerCase());
+                if (tagName === 'select') {
+                    console.log("Auto-correcting click on <select> — native selects can't be clicked, using selectOption");
+                    // the ai  usually mentions what it wants to pick but we can't select without a value, so log a warning
+                    if (decision.value) {
+                        await humanSelect(page, selector, decision.value);
+                        actionHistory.push(`Selected "${decision.value}" in dropdown ID ${decision.elementId} (auto-corrected from click)`);
+                    } else {
+                        actionHistory.push(`Tried to click native <select> ID ${decision.elementId} but no value provided — use action "select" with a value next time`);
+                        console.log("No value provided for <select> — agent needs to use 'select' action with a value");
+                    }
                     shouldScrollToTop = true;
+                } else {
+                    await humanClick(page, selector);
+                    actionHistory.push(`Clicked ID ${decision.elementId} (${decision.thought})`);
+                    
+                    const role = await page.locator(selector).first().evaluate(el => el.getAttribute('role'));
+                    if (tagName === 'button' || role === 'combobox' || role === 'button') {
+                        shouldScrollToTop = true;
+                    }
                 }
             } else {
                 console.log("Element missing after tag removal. Retrying...");
@@ -39,23 +49,28 @@ export async function executeAction(
         } 
         else if (decision.action === 'type') {
             const selector = `[data-agent-persist="${decision.elementId}"]`;
-            const element = page.locator(selector).first();
             
             try {
-                await humanType(page, selector, decision.value!);
+                const autocompleteDetected = await humanType(page, selector, decision.value!);
                 
-                // trigger events so the page knows we typed
-                await page.evaluate((sel) => {
-                    const el = document.querySelector(sel);
-                    if (el) {
-                        el.dispatchEvent(new Event('input', { bubbles: true }));
-                        el.dispatchEvent(new Event('change', { bubbles: true }));
-                        el.dispatchEvent(new Event('blur', { bubbles: true }));
-                    }
-                }, selector);
+                if (!autocompleteDetected) {
+                    // only dispatch extra events for normal inputs (not autocomplete)
+                    await page.evaluate((sel) => {
+                        const el = document.querySelector(sel);
+                        if (el) {
+                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                            el.dispatchEvent(new Event('change', { bubbles: true }));
+                            el.dispatchEvent(new Event('blur', { bubbles: true }));
+                        }
+                    }, selector);
+                }
                 
                 await randomDelay(200, 400);
-                actionHistory.push(`Typed "${decision.value}" into ID ${decision.elementId}`);
+                actionHistory.push(
+                    autocompleteDetected
+                        ? `Typed "${decision.value}" into ID ${decision.elementId} (autocomplete dropdown appeared — waiting for selection)`
+                        : `Typed "${decision.value}" into ID ${decision.elementId}`
+                );
             } catch (err: any) {
                 // only if typing fails, check if it's a combobox and click instead
                 if (err.message && err.message.includes('not an <input>')) {
@@ -85,7 +100,7 @@ export async function executeAction(
         else if (decision.action === 'scroll_element') {
             // strip "S" cause ai sees scroll containers labeled as "S:104"
             const rawId = String(decision.elementId).replace(/^S:/i, '');
-            
+
             const selector = `[data-agent-persist="${rawId}"]`;
             const element = page.locator(selector).first();
             

@@ -6,9 +6,9 @@ import { runAgent } from './agent/runner';
 // const GOAL = "go on www.last.fm/user/dishit79 and get user Dishit79 and find his top song of all time"
 // const GOAL = "go to https://www.metro.ca/en and add the basic ingredients, step by step, to make chili for me to my cart"
 // const GOAL = "on https://www.clutch.ca/ - get me to the list of all only from 2010 to 2021 Honda CRV with less than 50,000km"
-// const GOAL = "go to chiaki.site and find the watch order for Steins Gate";
+const GOAL = "go to https://www.animechrono.com/ and find the watch order for Steins Gate";
 // const GOAL = "go to chiaki.site and find the watch order for attack on titatio ";
-const GOAL = "on https://autotrader.ca/ - get me to the list of all only from 2010 to 2021 Honda CRV with less than 50,000km"
+// const GOAL = "on https://autotrader.ca/ - get me to the list of all only from 2010 to 2021 Honda CRV with less than 50,000km"
 
 
 async function main() {
