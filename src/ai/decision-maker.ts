@@ -69,12 +69,13 @@ export async function determineAction(
        - To scroll the MAIN PAGE: use action "scroll" with direction "down" or "up"
        - To scroll a SPECIFIC CONTAINER (modal, sidebar, dropdown list): use action "scroll_element" with the elementId (from BLUE tag) and direction "down" or "up"
     7. Use the DOM element details above to understand what each elemnt does (text, placeholder, aria-label, role, etc.)
-    8. Return JSON ONLY (no markdown):
+    8. SLIDERS: NEVER interact with range sliders or drag handles. If you need to set a numeric value (like mileage or price), type it into the corresponding text input field instead.
+    9. Return JSON ONLY (no markdown):
     
     {
         "thought": "brief reasoning",
         "action": "click" | "type" | "select" | "goToURL" | "scroll" | "scroll_element" | "press_enter" | "finished",
-        "elementId": number (the number in the red/blue box - required for click/type/select/scroll_element),
+        "elementId": number (the NUMERIC ID only - for red tags use the number directly, for blue tags like "S:104" use just 104 - required for click/type/select/scroll_element),
         "value": string (if typing or selecting),
         "direction": "down" | "up" (if scrolling),
         "url": string (if using goToURL - use full URL like "https://example.com")

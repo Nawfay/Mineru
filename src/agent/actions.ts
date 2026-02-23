@@ -83,7 +83,10 @@ export async function executeAction(
             shouldScrollToTop = true;
         }
         else if (decision.action === 'scroll_element') {
-            const selector = `[data-agent-persist="${decision.elementId}"]`;
+            // strip "S" cause ai sees scroll containers labeled as "S:104"
+            const rawId = String(decision.elementId).replace(/^S:/i, '');
+            
+            const selector = `[data-agent-persist="${rawId}"]`;
             const element = page.locator(selector).first();
             
             if (await element.count() > 0) {

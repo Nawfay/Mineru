@@ -13,11 +13,14 @@ export async function runAgent(page: Page, goal: string): Promise<void> {
     let stepCount = 0;
 
     console.log("Agent starting...");
-    createSessionDir();
+    const sessionDir = createSessionDir();
     
-    // let ai decide the best starting page
+    // let ai decide the best starting page and refine the goal
     console.log("Determining best starting page...");
-    const startingUrl = await determineStartingPage(goal);
+    const { url: startingUrl, refinedGoal } = await determineStartingPage(goal, sessionDir);
+    
+    // use refined goal for the rest of the session
+    const activeGoal = refinedGoal;
     
     // navigate to starting page
     await page.goto(startingUrl);
@@ -40,7 +43,7 @@ export async function runAgent(page: Page, goal: string): Promise<void> {
 
         // ask ai what to do next
         await randomDelay(1000, 2000);
-        const result = await determineAction(goal, base64, actionHistory, interactiveMap);
+        const result = await determineAction(activeGoal, base64, actionHistory, interactiveMap);
         const decision = result.decision;
         console.log("Decision:", decision);
 
