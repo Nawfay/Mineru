@@ -10,6 +10,8 @@ dotenv.config();
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const DEBUG_OUTPUT_DIR = path.join(process.cwd(), 'debug-output');
 
+const SCHEMA_VERSION = 1;
+
 // collect all URLs from a session in step order
 function collectUrlChain(sessionDir: string, maxStep: number): { step: number; url: string }[] {
     const chain: { step: number; url: string }[] = [];
@@ -184,20 +186,26 @@ async function ingest() {
 
     const collection = await getCollection();
 
-    // delete all existing entries so we re-ingest with the new schema
+    // check which sessions already exist in ChromaDB so we don't overwrite them
     const existing = await collection.get();
-    if (existing.ids.length > 0) {
-        await collection.delete({ ids: existing.ids });
-        console.log(`Cleared ${existing.ids.length} old entries.`);
+    const existingIds = new Set(existing.ids);
+
+    const newMemories = memories.filter(m => !existingIds.has(m.sessionId));
+
+    if (newMemories.length === 0) {
+        console.log('All sessions already ingested — nothing new to add.');
+        return;
     }
+
+    console.log(`${existingIds.size} sessions already in ChromaDB, ${newMemories.length} new to ingest.`);
 
     // embed: domain + goal + final URL + jump point URL
     await collection.add({
-        ids: memories.map(m => m.sessionId),
-        documents: memories.map(m =>
+        ids: newMemories.map(m => m.sessionId),
+        documents: newMemories.map(m =>
             `domain: ${m.domain} | goal: ${m.originalGoal} | refined: ${m.refinedGoal} | result_url: ${m.finalUrl} | jump_point: ${m.jumpPointUrl}`
         ),
-        metadatas: memories.map(m => ({
+        metadatas: newMemories.map(m => ({
             domain: m.domain,
             originalGoal: m.originalGoal,
             refinedGoal: m.refinedGoal,
@@ -205,11 +213,12 @@ async function ingest() {
             jumpPointUrl: m.jumpPointUrl,
             jumpPointStep: m.jumpPointStep,
             stepCount: m.stepCount,
-            timestamp: m.timestamp
+            timestamp: m.timestamp,
+            schemaVersion: SCHEMA_VERSION
         }))
     });
 
-    console.log(`Ingested ${memories.length} sessions into ChromaDB.`);
+    console.log(`Ingested ${newMemories.length} new sessions into ChromaDB (${existingIds.size} existing preserved).`);
 }
 
 ingest().catch(console.error);
