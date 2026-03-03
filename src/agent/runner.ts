@@ -1,11 +1,12 @@
 import { Page } from 'playwright';
-import { tagPage, removeTags } from '../browser/tagging';
+import { getAccessibilityTree, tagInteractiveElements, showVisualTags, removeVisualTags } from '../browser/dom-tree';
 import { determineAction } from '../ai/decision-maker';
 import { determineStartingPage } from '../ai/starting-prompt';
 import { executeAction } from './actions';
 import { createSessionDir, saveDebugData } from '../utils/debug';
 import { randomDelay } from '../utils/delays';
 import { MAX_STEPS } from '../config/constants';
+import { detectPopup } from '../browser/popup-detect';
 
 // main agent loop
 export async function runAgent(page: Page, goal: string): Promise<void> {
@@ -14,14 +15,14 @@ export async function runAgent(page: Page, goal: string): Promise<void> {
 
     console.log("Agent starting...");
     const sessionDir = createSessionDir();
-    
+
     // let ai decide the best starting page and refine the goal
     console.log("Determining best starting page...");
     const { url: startingUrl, refinedGoal } = await determineStartingPage(goal, sessionDir);
-    
+
     // use refined goal for the rest of the session
     const activeGoal = refinedGoal;
-    
+
     // navigate to starting page
     await page.goto(startingUrl);
 
@@ -31,36 +32,54 @@ export async function runAgent(page: Page, goal: string): Promise<void> {
 
         // wait for page to load
         await page.waitForLoadState('domcontentloaded');
-        await randomDelay(1000, 2000);
+        await randomDelay(800, 1500);
 
-        // tag all interactive elements
-        const interactiveMap = await tagPage(page);
-        console.log(`Found ${interactiveMap.length} interacitve elements.`);
+        // get accessibility tree (replaces screenshot + DOM tagging)
+        const { tree, interactiveElements, treeText } = await getAccessibilityTree(page);
+        console.log(`Found ${interactiveElements.length} interactive elements via accessibility tree.`);
 
-        // take screenshot for vision model
+        // tag elements in the DOM so we can interact with them via data-agent-persist
+        await tagInteractiveElements(page, tree);
+
+        // detect popups/modals and tell the LLM
+        const popup = await detectPopup(page);
+        if (popup.detected) {
+            console.log(`⚠️ Popup detected: ${popup.type} — ${popup.closeHint}`);
+        }
+
+        // show visual debug tags on the page (numbered overlays)
+        await showVisualTags(page, tree);
+
+        // take screenshot for debug only (not sent to LLM)
         const screenshot = await page.screenshot({ type: 'jpeg', quality: 50 });
-        const base64 = screenshot.toString('base64');
 
-        // ask ai what to do next
-        await randomDelay(1000, 2000);
-        const result = await determineAction(activeGoal, base64, actionHistory, interactiveMap);
+        // remove visual tags before executing actions
+        await removeVisualTags(page);
+
+        // ask ai what to do next (text-only, no vision)
+        await randomDelay(500, 1000);
+        const result = await determineAction(
+            activeGoal,
+            treeText,
+            actionHistory,
+            page.url(),
+            popup
+        );
         const decision = result.decision;
         console.log("Decision:", decision);
 
         saveDebugData(
             stepCount,
             screenshot,
-            interactiveMap,
+            interactiveElements,
             decision,
             page.url(),
             result.prompt,
             result.response
         );
 
-        await removeTags(page);
-
         if (decision.action === 'finished') {
-            console.log("Goal acheived!");
+            console.log("Goal achieved!");
             break;
         }
 

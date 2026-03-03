@@ -1,98 +1,74 @@
 import { groq } from './groq-client';
-import { DOMElement, DecisionResult } from '../types';
+import { DecisionResult } from '../types';
+import { PopupInfo } from '../browser/popup-detect';
 
-// use vision model to decide what to do next
+// use text-based LLM to decide what to do next (no vision needed)
 export async function determineAction(
-    goal: string, 
-    screenshotBase64: string, 
-    history: string[], 
-    domElements: DOMElement[]
+    goal: string,
+    accessibilityTree: string,
+    history: string[],
+    currentUrl: string,
+    popup: PopupInfo
 ): Promise<DecisionResult> {
-    // only keep last 5 actions
     const recentHistory = history.slice(-5);
-    
-    // create readable summary of dom elements
-    const domSummary = domElements.map(el => {
-        if (el.type === 'scroll-container') {
-            return `[S:${el.id}] SCROLLABLE ${el.tag} (height: ${el.clientHeight}px, scrollable: ${el.scrollHeight}px) class="${el.className}" visible: "${el.visibleContent || ''}"`;
-        }
-        const parts = [`[${el.id}] ${el.tag}`];
-        if (el.text) parts.push(`text="${el.text}"`);
-        if (el.placeholder) parts.push(`placeholder="${el.placeholder}"`);
-        if (el.inputType) parts.push(`type="${el.inputType}"`);
-        if (el.value) parts.push(`value="${el.value}"`);
-        if (el.ariaLabel) parts.push(`aria-label="${el.ariaLabel}"`);
-        if (el.title) parts.push(`title="${el.title}"`);
-        if (el.role) parts.push(`role="${el.role}"`);
-        if (el.options && el.options.length > 0) parts.push(`options=[${el.options.join(', ')}]`);
-        return parts.join(' ');
-    }).join('\n');
 
-    const prompt = `
-    You are a browser automation agent. Goal: "${goal}".
-    
-    Attached is a screenshot of the curent page.
-    - RED LABELS (e.g. "5"): Clickable elements (Buttons, Links, Inputs).
-    - BLUE LABELS (e.g. "S:12"): SCROLLABLE AREAS (Sidebars, Lists, Modals).
-    
-    DOM ELEMENTS (with details):
-    ${domSummary}
-    
-    Recent Action History (last 5 actions):
-    ${recentHistory.join('\n')}
-
-    INSTRUCTIONS:
-    1. NAVIGATION PRIORITY (IN ORDER OF PREFERENCE):
-       a) SEARCH BAR FIRST: If you see a search bar or search input on the page, ALWAYS use it to navigate or search. Type the website name or search query, then press enter.
-       b) Direct URL: If no search bar is available and you know the exact URL, use action "goToURL" with the full URL
-       c) Clicking links: Only as a last resort if neither search bar nor direct URL works
-       
-       IMPORTANT: Search bars are the MOST RELIABLE way to navigate. Use them whenever available!
-       
-    2. Look at the screenshot. Identify the element that helps you reach the goal (or close a popup).
-    3. If a popup/modal is blocking the view, your priority is to CLOSE it (look for an 'X' or 'Close' button).
-    4. INTERACTING WITH INPUTS:
-       - For text/number inputs: use action "type" with the elementId and value. If an autocomplete dropdown appears after typing, the page will be re-tagged automatically so you can click a suggestion in the next step.
-       - After typing into a search box or form field, use action "press_enter" to submit (no elementId needed)
-       - For combobox/button elements (role="combobox"): use action "click" to open them, then click the option you want
-       - DO NOT try to type into buttons or comboboxes - always click them
-    5. SELECTING FROM DROPDOWNS:
-       - For <select> elements (tag="select" in DOM summary): ALWAYS use action "select" with the elementId and the label text of the option you want. NEVER click a <select> — it opens a native OS menu that cannot be seen or interacted with. The available options are listed in the DOM summary.
-       - For custom dropdowns (comboboxes, scrollable lists):
-         a) First CLICK the combobox button to open the dropdown
-         b) If needed, scroll the container using "scroll_element" to find your option
-         c) Then CLICK the option you want (like "2021")
-       - Example workflow: {"action": "click", "elementId": 140} -> {"action": "click", "elementId": 27}
-    6. SCROLLING STRATEGY:
-       - If the target option (like "2021") is hidden in a scrollable list, use "scroll_element" on the BLUE tag (S:XX) to scroll that container
-       - The visible content of scrollable areas is shown in the DOM summary - use this to know if you need to scroll
-       - DO NOT use global scroll if a sidebar/modal exists; scroll the sidebar/modal directly using its BLUE tag
-       - To scroll the MAIN PAGE: use action "scroll" with direction "down" or "up"
-       - To scroll a SPECIFIC CONTAINER (modal, sidebar, dropdown list): use action "scroll_element" with the elementId (from BLUE tag) and direction "down" or "up"
-    7. Use the DOM element details above to understand what each elemnt does (text, placeholder, aria-label, role, etc.)
-    8. SLIDERS: NEVER interact with range sliders or drag handles. If you need to set a numeric value (like mileage or price), type it into the corresponding text input field instead.
-    9. Return JSON ONLY (no markdown):
-    
-    {
-        "thought": "brief reasoning",
-        "action": "click" | "type" | "select" | "goToURL" | "scroll" | "scroll_element" | "press_enter" | "finished",
-        "elementId": number (the NUMERIC ID only - for red tags use the number directly, for blue tags like "S:104" use just 104 - required for click/type/select/scroll_element),
-        "value": string (if typing or selecting),
-        "direction": "down" | "up" (if scrolling),
-        "url": string (if using goToURL - use full URL like "https://example.com")
+    // build popup warning section
+    let popupSection = '';
+    if (popup.detected) {
+        popupSection = `
+⚠️ POPUP/MODAL DETECTED (type: ${popup.type})
+${popup.closeHint}
+You MUST dismiss this popup FIRST before doing anything else. The page content behind it is not accessible until the popup is closed. Look for a button labeled "close", "X", "dismiss", "accept", "got it", or similar in the accessibility tree above and click it.
+`;
     }
-    `;
+
+    const prompt = `You are a browser automation agent. Goal: "${goal}"
+
+CURRENT URL: ${currentUrl}
+${popupSection}
+PAGE STRUCTURE:
+${accessibilityTree}
+
+Elements with [N] are interactive — use the number as elementId.
+Tags like <button>, <a>, <input>, <select> tell you the element type.
+Attributes show state: value, checked, expanded, disabled, etc.
+Text between tags is the visible label. Plain text lines are page content for context.
+
+Recent actions:
+${recentHistory.length > 0 ? recentHistory.join('\n') : '(none)'}
+
+RULES:
+1. POPUPS FIRST: If a popup/modal is detected, dismiss it before anything else.
+2. NAVIGATION: Prefer search bars > direct URL > clicking links.
+3. INTERACTIONS:
+   - <input>: "type" with elementId + value
+   - <button>/<a>: "click" with elementId
+   - <select> expanded=false: "click" to open, then click the option
+   - <select> with native options: "select" with elementId + option label
+   - checkbox/radio: "click" to toggle
+4. COLLAPSED SECTIONS: If a <button> shows expanded=false, its content is HIDDEN. You MUST click it to expand first before interacting with anything inside that section. Do NOT skip this step.
+5. SCROLLING: "scroll" + direction for page, "scroll_element" + elementId for containers. Check scroll position at top of tree.
+6. SLIDERS: Type into the associated text input instead.
+
+Return JSON ONLY:
+{
+    "thought": "brief reasoning",
+    "action": "click" | "type" | "select" | "goToURL" | "scroll" | "scroll_element" | "press_enter" | "finished",
+    "elementId": number,
+    "value": string,
+    "direction": "down" | "up",
+    "url": string
+}`;
 
     try {
         const completion = await groq.chat.completions.create({
-            model: "meta-llama/llama-4-maverick-17b-128e-instruct",
+            // model: "meta-llama/llama-4-maverick-17b-128e-instruct",
+            // model: "llama-3.3-70b-versatile",
+            model: "openai/gpt-oss-120b",
             messages: [
                 {
                     role: "user",
-                    content: [
-                        { type: "text", text: prompt },
-                        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${screenshotBase64}` } }
-                    ]
+                    content: prompt
                 }
             ],
             temperature: 0,
@@ -100,7 +76,7 @@ export async function determineAction(
         });
 
         const response = completion.choices[0].message.content || "{}";
-        
+
         return {
             decision: JSON.parse(response),
             prompt: prompt,
@@ -108,7 +84,7 @@ export async function determineAction(
         };
     } catch (e) {
         console.error("Groq Error:", e);
-        return { 
+        return {
             decision: { action: "error", thought: `Error: ${e}` },
             prompt: prompt,
             response: `Error: ${e}`

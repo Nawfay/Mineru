@@ -44,7 +44,8 @@ export async function executeAction(
                     }
                 }
             } else {
-                console.log("Element missing after tag removal. Retrying...");
+                console.log(`Element ID ${decision.elementId} not found in DOM`);
+                actionHistory.push(`FAILED: Element ID ${decision.elementId} not found — it may have been removed or not tagged properly`);
             }
         } 
         else if (decision.action === 'type') {

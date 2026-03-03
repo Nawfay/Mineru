@@ -7,10 +7,10 @@ import { runAgent } from './agent/runner';
 // const GOAL = "go to https://www.metro.ca/en and add the basic ingredients, step by step, to make chili for me to my cart"
 // const GOAL = "on https://www.clutch.ca/ - get me to the list of all only from 2010 to 2021 Honda CRV with less than 50,000km"
 // const GOAL = "go to https://www.animechrono.com/ and find the watch order for Steins Gate";
-// const GOAL = "go to chiaki.site and find the watch order for attack on titatio ";
+const GOAL = "go to chiaki.site and find the watch order for attack on titatio ";
 // const GOAL = "on https://autotrader.ca/ - get me to the list of all only from 2010 to 2021 Honda CRV with less than 50,000km"
 
-const GOAL = "on https://www.clutch.ca/ - get me to the list of all 2021 BMW 3 Series with less than 50,000km. Make sure you only get 2021 but setting the range correctly by setting maximum and minimum year to 2021"
+// const GOAL = "on https://www.clutch.ca/ - get me to the list of all 2021 BMW 3 Series with less than 50,000km. Make sure you only get 2021 but setting the range correctly by setting maximum and minimum year to 2021"
 
 async function main() {
     const { browser, context } = await setupBrowser();
