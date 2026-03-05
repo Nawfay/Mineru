@@ -68,7 +68,7 @@ Return JSON ONLY:
             messages: [
                 {
                     role: "user",
-                    content: prompt
+                    content: prompt + "\n\n" + prompt // prompt repetition: lets every token attend to every other token
                 }
             ],
             temperature: 0,
