@@ -71,7 +71,8 @@ export async function determineAction(
        - To scroll a SPECIFIC CONTAINER (modal, sidebar, dropdown list): use action "scroll_element" with the elementId (from BLUE tag) and direction "down" or "up"
     7. Use the DOM element details above to understand what each elemnt does (text, placeholder, aria-label, role, etc.)
     8. SLIDERS: NEVER interact with range sliders or drag handles. If you need to set a numeric value (like mileage or price), type it into the corresponding text input field instead.
-    9. Return JSON ONLY (no markdown):
+    9. AVOID LOOPS: If you see the same action repeated in recent history, do NOT repeat it again. Try a different approach instead.
+    10. Return JSON ONLY (no markdown):
     
     {
         "thought": "brief reasoning",
@@ -90,7 +91,7 @@ export async function determineAction(
                 {
                     role: "user",
                     content: [
-                        { type: "text", text: prompt },
+                        { type: "text", text: prompt + "\n\n" + prompt },
                         { type: "image_url", image_url: { url: `data:image/jpeg;base64,${screenshotBase64}` } }
                     ]
                 }
