@@ -7,7 +7,7 @@ let sessionDir: string | null = null;
 // create a new folder for this session
 export function createSessionDir(): string {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    sessionDir = path.join(process.cwd(), 'debug-output', `session-${timestamp}`);
+    sessionDir = path.join(process.cwd(), 'debug-output', `1-session-${timestamp}`);
     
     if (!fs.existsSync(sessionDir)) {
         fs.mkdirSync(sessionDir, { recursive: true });
