@@ -10,7 +10,8 @@
     "build": "tsc",
     "start": "node dist/main.js",
     "dev": "ts-node src/main.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dom-test": "ts-node src/dom/test.ts"
   },
   "dependencies": {
     "@chroma-core/default-embed": "^0.1.9",
