@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { DOMElement, AgentDecision } from '../types';
+import { AgentDecision } from '../types';
+import { SelectorMapEntry } from '../dom';
 
 let sessionDir: string | null = null;
 
@@ -21,7 +22,8 @@ export function createSessionDir(): string {
 export function saveDebugData(
     stepCount: number,
     screenshot: Buffer,
-    interactiveMap: DOMElement[],
+    domRepresentation: string,
+    selectorMap: Map<number, SelectorMapEntry>,
     decision: AgentDecision,
     url: string,
     prompt: string,
@@ -38,10 +40,17 @@ export function saveDebugData(
         screenshot
     );
     
-    // save dom elements
+    // save dom representation
     fs.writeFileSync(
-        path.join(sessionDir, `step-${stepCount}-elements.json`),
-        JSON.stringify(interactiveMap, null, 2)
+        path.join(sessionDir, `step-${stepCount}-dom.txt`),
+        domRepresentation
+    );
+    
+    // save selector map
+    const selectorEntries = Object.fromEntries(selectorMap);
+    fs.writeFileSync(
+        path.join(sessionDir, `step-${stepCount}-selectors.json`),
+        JSON.stringify(selectorEntries, null, 2)
     );
     
     // save ai decision

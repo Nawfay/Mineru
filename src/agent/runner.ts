@@ -1,5 +1,5 @@
 import { Page } from 'playwright';
-import { tagPage, removeTags } from '../browser/tagging';
+import { DOMExtractor, injectTags, removeTags } from '../dom';
 import { determineAction } from '../ai/decision-maker';
 import { determineStartingPage } from '../ai/starting-prompt';
 import { executeAction } from './actions';
@@ -33,38 +33,40 @@ export async function runAgent(page: Page, goal: string): Promise<void> {
         await page.waitForLoadState('domcontentloaded');
         await randomDelay(1000, 2000);
 
-        // tag all interactive elements
-        const interactiveMap = await tagPage(page);
-        console.log(`Found ${interactiveMap.length} interacitve elements.`);
+        // extract DOM tree with numbered interactive elements
+        const extractor = new DOMExtractor(page);
+        const domResult = await extractor.extract();
+        console.log(`Found ${domResult.selectorMap.size} interactive elements.`);
 
-        // take screenshot for vision model
+        // inject matching visual labels and take screenshot
+        await injectTags(page, domResult.tree);
         const screenshot = await page.screenshot({ type: 'jpeg', quality: 50 });
         const base64 = screenshot.toString('base64');
+        await removeTags(page);
 
         // ask ai what to do next
         await randomDelay(1000, 2000);
-        const result = await determineAction(activeGoal, base64, actionHistory, interactiveMap);
+        const result = await determineAction(activeGoal, base64, actionHistory, domResult.llmRepresentation);
         const decision = result.decision;
         console.log("Decision:", decision);
 
         saveDebugData(
             stepCount,
             screenshot,
-            interactiveMap,
+            domResult.llmRepresentation,
+            domResult.selectorMap,
             decision,
             page.url(),
             result.prompt,
             result.response
         );
 
-        await removeTags(page);
-
         if (decision.action === 'finished') {
             console.log("Goal acheived!");
             break;
         }
 
-        await executeAction(page, decision, actionHistory);
+        await executeAction(page, decision, actionHistory, domResult.selectorMap);
     }
 
     console.log("Session ended.");

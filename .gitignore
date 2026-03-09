@@ -3,3 +3,4 @@ dist/
 *.log
 .env
 debug-output/
+old-debug-output/

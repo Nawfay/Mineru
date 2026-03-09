@@ -2,12 +2,22 @@ import { Page } from 'playwright';
 import { humanClick, humanType, humanSelect } from '../browser/interactions';
 import { randomDelay } from '../utils/delays';
 import { AgentDecision } from '../types';
+import { SelectorMapEntry } from '../dom';
+
+// resolve an element ID to a CSS selector via the selector map
+function resolveSelector(elementId: number, selectorMap: Map<number, SelectorMapEntry>): string {
+    const entry = selectorMap.get(elementId);
+    if (entry) return entry.cssSelector;
+    // fallback to data-agent-persist for backward compat
+    return `[data-agent-persist="${elementId}"]`;
+}
 
 // execute the action decided by the ai
 export async function executeAction(
     page: Page,
     decision: AgentDecision,
-    actionHistory: string[]
+    actionHistory: string[],
+    selectorMap: Map<number, SelectorMapEntry>
 ): Promise<void> {
     // track if we should scroll to top after this action
     let shouldScrollToTop = false;
@@ -19,7 +29,7 @@ export async function executeAction(
             shouldScrollToTop = true;
         } 
         else if (decision.action === 'click') {
-            const selector = `[data-agent-persist="${decision.elementId}"]`;
+            const selector = resolveSelector(decision.elementId!, selectorMap);
             if (await page.locator(selector).count() > 0) {
                 // if the ai tries to click a <select>, use selectOption instead
                 const tagName = await page.locator(selector).first().evaluate(el => el.tagName.toLowerCase());
@@ -48,7 +58,7 @@ export async function executeAction(
             }
         } 
         else if (decision.action === 'type') {
-            const selector = `[data-agent-persist="${decision.elementId}"]`;
+            const selector = resolveSelector(decision.elementId!, selectorMap);
             
             try {
                 const autocompleteDetected = await humanType(page, selector, decision.value!);
@@ -84,7 +94,7 @@ export async function executeAction(
             }
         }
         else if (decision.action === 'select') {
-            const selector = `[data-agent-persist="${decision.elementId}"]`;
+            const selector = resolveSelector(decision.elementId!, selectorMap);
             await humanSelect(page, selector, decision.value!);
             actionHistory.push(`Selected "${decision.value}" in dropdown ID ${decision.elementId}`);
             shouldScrollToTop = true;
@@ -101,7 +111,7 @@ export async function executeAction(
             // strip "S" cause ai sees scroll containers labeled as "S:104"
             const rawId = String(decision.elementId).replace(/^S:/i, '');
 
-            const selector = `[data-agent-persist="${rawId}"]`;
+            const selector = resolveSelector(parseInt(rawId), selectorMap);
             const element = page.locator(selector).first();
             
             if (await element.count() > 0) {

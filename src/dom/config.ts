@@ -14,7 +14,7 @@ export const PRUNED_TAGS = new Set([
 
 /** Interactive element selectors */
 export const INTERACTIVE_SELECTORS = [
-    'a', 'button', 'input', 'select', 'textarea',
+    'a', 'button', 'input', 'select', 'textarea', 'label',
     '[role="button"]', '[role="link"]', '[role="checkbox"]',
     '[role="radio"]', '[role="tab"]', '[role="menuitem"]',
     '[role="option"]', '[role="switch"]', '[role="combobox"]',

@@ -60,9 +60,24 @@ export class DOMExtractor {
                 }
 
                 function isInteractiveElement(el: Element): boolean {
-                    return interactiveSelectors.some(sel => {
+                    // check explicit interactive selectors first
+                    if (interactiveSelectors.some(sel => {
                         try { return el.matches(sel); } catch { return false; }
-                    });
+                    })) return true;
+
+                    // detect cursor:pointer for framework-driven clickables (React, Vue, etc.)
+                    // but only if the element itself sets cursor:pointer, not inherited from a parent
+                    const style = window.getComputedStyle(el);
+                    if (style.cursor === 'pointer') {
+                        const parent = el.parentElement;
+                        const parentCursor = parent ? window.getComputedStyle(parent).cursor : 'auto';
+                        // only count if this element introduces cursor:pointer (parent doesn't have it)
+                        if (parentCursor !== 'pointer') {
+                            return true;
+                        }
+                    }
+
+                    return false;
                 }
 
                 function isElementVisible(el: Element): boolean {
@@ -77,10 +92,16 @@ export class DOMExtractor {
 
                 function getScrollInfo(el: Element): any | null {
                     const style = window.getComputedStyle(el);
-                    const isScrollable =
-                        (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
-                        el.scrollHeight > el.clientHeight;
-                    if (!isScrollable) return null;
+                    const overflowY = style.overflowY;
+                    const overflow = style.overflow;
+                    // check both overflowY and the shorthand overflow property
+                    const hasScrollableOverflow =
+                        overflowY === 'auto' || overflowY === 'scroll' ||
+                        overflow === 'auto' || overflow === 'scroll';
+                    // also detect elements that are actually scrollable regardless of overflow style
+                    // (some sites use overflow:hidden with JS-controlled scrolling)
+                    const isActuallyScrollable = el.scrollHeight > el.clientHeight + 10;
+                    if (!isActuallyScrollable || (!hasScrollableOverflow && overflowY === 'visible')) return null;
 
                     const scrollTop = el.scrollTop;
                     const scrollHeight = el.scrollHeight;
@@ -131,7 +152,24 @@ export class DOMExtractor {
                     const scrollInfo = getScrollInfo(el);
                     const nodeId = nodeIdCounter++;
 
+                    // stamp interactive+visible elements and scrollable containers
+                    // so we can target them later via data-mineru-id
+                    if (((interactive || jsClick) && visible) || scrollInfo) {
+                        el.setAttribute('data-mineru-id', String(nodeId));
+                    }
+
                     const children: any[] = [];
+
+                    // traverse shadow DOM if present (web components like Reddit's search)
+                    if (el.shadowRoot) {
+                        for (const child of Array.from(el.shadowRoot.children)) {
+                            if (child instanceof Element) {
+                                const childNode = walkNode(child);
+                                if (childNode) children.push(childNode);
+                            }
+                        }
+                    }
+
                     for (const child of Array.from(el.children)) {
                         const childNode = walkNode(child);
                         if (childNode) children.push(childNode);
@@ -173,42 +211,54 @@ export class DOMExtractor {
     // ---------------------------------------------------------------
 
     private processTree(raw: RawDOMNode): DOMTreeNode {
-        return this.processNode(raw);
-    }
-
-    private processNode(raw: RawDOMNode): DOMTreeNode {
-        const children: DOMTreeNode[] = [];
-        for (const child of raw.children) {
-            if (PRUNED_TAGS.has(child.tagName)) continue;
-            children.push(this.processNode(child));
+            return this.processNode(raw, false);
         }
 
-        const filteredAttrs: Record<string, string> = {};
-        for (const [key, value] of Object.entries(raw.attributes)) {
-            if (LLM_INCLUDE_ATTRIBUTES.has(key)) {
-                filteredAttrs[key] = key === 'class' ? this.filterDynamicClasses(value) : value;
+    private static readonly ALWAYS_INDEX_TAGS = new Set([
+            'input', 'select', 'textarea',
+        ]);
+
+        private processNode(raw: RawDOMNode, parentIsInteractive: boolean): DOMTreeNode {
+                const children: DOMTreeNode[] = [];
+                const thisIsInteractive = raw.isInteractive && raw.isVisible;
+
+                for (const child of raw.children) {
+                    if (PRUNED_TAGS.has(child.tagName)) continue;
+                    children.push(this.processNode(child, thisIsInteractive || parentIsInteractive));
+                }
+
+                const filteredAttrs: Record<string, string> = {};
+                for (const [key, value] of Object.entries(raw.attributes)) {
+                    if (LLM_INCLUDE_ATTRIBUTES.has(key)) {
+                        filteredAttrs[key] = key === 'class' ? this.filterDynamicClasses(value) : value;
+                    }
+                }
+
+                // assign a selector index if:
+                // - interactive + not inside interactive parent (avoid redundant IDs), OR
+                // - form control (input/select/textarea) which always needs its own ID, OR
+                // - scrollable container (AI needs to reference it for scroll_element)
+                let selectorIndex: number | null = null;
+                const alwaysIndex = DOMExtractor.ALWAYS_INDEX_TAGS.has(raw.tagName);
+                const isScrollable = !!raw.scrollInfo;
+                if ((thisIsInteractive && (!parentIsInteractive || alwaysIndex)) || isScrollable) {
+                    selectorIndex = this.nextIndex++;
+                    this.selectorMap.set(selectorIndex, {
+                        index: selectorIndex,
+                        backendNodeId: raw.backendNodeId,
+                        cssSelector: this.buildCssSelector(raw),
+                        tagName: raw.tagName,
+                        textHint: raw.textContent.substring(0, 50),
+                    });
+                }
+
+                return {
+                    selectorIndex, tagName: raw.tagName, attributes: filteredAttrs,
+                    textContent: raw.textContent, children,
+                    isInteractive: raw.isInteractive, isVisible: raw.isVisible,
+                    scrollInfo: raw.scrollInfo, boundingBox: raw.boundingBox, role: raw.role,
+                };
             }
-        }
-
-        let selectorIndex: number | null = null;
-        if (raw.isInteractive && raw.isVisible) {
-            selectorIndex = this.nextIndex++;
-            this.selectorMap.set(selectorIndex, {
-                index: selectorIndex,
-                backendNodeId: raw.backendNodeId,
-                cssSelector: this.buildCssSelector(raw),
-                tagName: raw.tagName,
-                textHint: raw.textContent.substring(0, 50),
-            });
-        }
-
-        return {
-            selectorIndex, tagName: raw.tagName, attributes: filteredAttrs,
-            textContent: raw.textContent, children,
-            isInteractive: raw.isInteractive, isVisible: raw.isVisible,
-            scrollInfo: raw.scrollInfo, boundingBox: raw.boundingBox, role: raw.role,
-        };
-    }
 
     private filterDynamicClasses(classStr: string): string {
         return classStr.split(/\s+/)
@@ -217,13 +267,9 @@ export class DOMExtractor {
     }
 
     private buildCssSelector(raw: RawDOMNode): string {
-        const tag = raw.tagName;
-        if (raw.attributes['id']) return `${tag}#${raw.attributes['id']}`;
-        if (raw.attributes['data-testid']) return `${tag}[data-testid="${raw.attributes['data-testid']}"]`;
-        if (raw.attributes['name']) return `${tag}[name="${raw.attributes['name']}"]`;
-        if (raw.ariaLabel) return `${tag}[aria-label="${raw.ariaLabel}"]`;
-        return tag;
-    }
+            // use the stamped data-mineru-id for a guaranteed unique selector
+            return `[data-mineru-id="${raw.backendNodeId}"]`;
+        }
 
     // ---------------------------------------------------------------
     // 3. Serialize to LLM-readable string
@@ -239,69 +285,82 @@ export class DOMExtractor {
     ]);
 
     private serialize(node: DOMTreeNode, depth: number): string {
-        if (!node.isVisible && !this.hasVisibleDescendant(node)) return '';
+            if (!node.isVisible && !this.hasVisibleDescendant(node)) return '';
 
-        // Skip nodes that are just whitespace/punctuation noise
-        if (this.isNoiseNode(node)) return '';
+            // Skip nodes that are just whitespace/punctuation noise
+            if (this.isNoiseNode(node)) return '';
 
-        const lines: string[] = [];
-        const indent = '  '.repeat(depth);
+            const lines: string[] = [];
+            const indent = '  '.repeat(depth);
 
-        // Should this node be collapsed (children promoted to same level)?
-        if (this.shouldCollapse(node)) {
-            // If it has meaningful text, emit it as plain text
+            // Should this node be collapsed (children promoted to same level)?
+            if (this.shouldCollapse(node)) {
+                // If it has meaningful text, emit it as plain text
+                const text = this.cleanText(node.textContent);
+                if (text) {
+                    lines.push(`${indent}${text}`);
+                }
+                for (const child of node.children) {
+                    const s = this.serialize(child, depth);
+                    if (s) lines.push(s);
+                }
+                return lines.join('\n');
+            }
+
+            // This node is meaningful — render it with tag
+            const indexPrefix = node.selectorIndex !== null ? `[${node.selectorIndex}] ` : '';
+            const attrStr = this.serializeAttributes(node);
+            const scrollStr = node.scrollInfo ? ` scroll="${this.formatScrollInfo(node.scrollInfo)}"` : '';
+
+            // For interactive nodes with a selector index, gather ALL descendant text
+            // and render as a single compact line — no need to recurse into children
+            if (node.selectorIndex !== null) {
+                const allText = this.gatherAllText(node);
+                if (allText) {
+                    lines.push(`${indent}${indexPrefix}<${node.tagName}${attrStr}${scrollStr}>${allText}</${node.tagName}>`);
+                } else {
+                    lines.push(`${indent}${indexPrefix}<${node.tagName}${attrStr}${scrollStr}>`);
+                }
+                return lines.join('\n');
+            }
+
             const text = this.cleanText(node.textContent);
-            if (text) {
-                lines.push(`${indent}${text}`);
-            }
+
+            // Serialize children
+            const childLines: string[] = [];
             for (const child of node.children) {
-                const s = this.serialize(child, depth);
-                if (s) lines.push(s);
+                const s = this.serialize(child, depth + 1);
+                if (s) childLines.push(s);
             }
-            return lines.join('\n');
-        }
 
-        // This node is meaningful — render it with tag
-        const indexPrefix = node.selectorIndex !== null ? `[${node.selectorIndex}] ` : '';
-        const attrStr = this.serializeAttributes(node);
-        const scrollStr = node.scrollInfo ? ` scroll="${this.formatScrollInfo(node.scrollInfo)}"` : '';
-        const text = this.cleanText(node.textContent);
-
-        // Serialize children
-        const childLines: string[] = [];
-        for (const child of node.children) {
-            const s = this.serialize(child, depth + 1);
-            if (s) childLines.push(s);
-        }
-
-        // Leaf node
-        if (childLines.length === 0) {
-            if (!text && !node.isInteractive && Object.keys(node.attributes).length === 0) return '';
-            if (text) {
-                lines.push(`${indent}${indexPrefix}<${node.tagName}${attrStr}${scrollStr}>${text}</${node.tagName}>`);
-            } else {
-                lines.push(`${indent}${indexPrefix}<${node.tagName}${attrStr}${scrollStr}>`);
+            // Leaf node
+            if (childLines.length === 0) {
+                if (!text && !node.isInteractive && Object.keys(node.attributes).length === 0) return '';
+                if (text) {
+                    lines.push(`${indent}${indexPrefix}<${node.tagName}${attrStr}${scrollStr}>${text}</${node.tagName}>`);
+                } else {
+                    lines.push(`${indent}${indexPrefix}<${node.tagName}${attrStr}${scrollStr}>`);
+                }
             }
-        }
-        // Node with children
-        else if (childLines.length === 1 && !text) {
-            // Single child — inline it if the child is short enough
-            const childTrimmed = childLines[0].trim();
-            if (childTrimmed.length < 120 && !childTrimmed.includes('\n')) {
-                lines.push(`${indent}${indexPrefix}<${node.tagName}${attrStr}${scrollStr}>${childTrimmed}</${node.tagName}>`);
+            // Node with children
+            else if (childLines.length === 1 && !text) {
+                // Single child — inline it if the child is short enough
+                const childTrimmed = childLines[0].trim();
+                if (childTrimmed.length < 120 && !childTrimmed.includes('\n')) {
+                    lines.push(`${indent}${indexPrefix}<${node.tagName}${attrStr}${scrollStr}>${childTrimmed}</${node.tagName}>`);
+                } else {
+                    lines.push(`${indent}${indexPrefix}<${node.tagName}${attrStr}${scrollStr}>`);
+                    lines.push(...childLines);
+                    lines.push(`${indent}</${node.tagName}>`);
+                }
             } else {
-                lines.push(`${indent}${indexPrefix}<${node.tagName}${attrStr}${scrollStr}>`);
+                lines.push(`${indent}${indexPrefix}<${node.tagName}${attrStr}${scrollStr}>${text}`);
                 lines.push(...childLines);
                 lines.push(`${indent}</${node.tagName}>`);
             }
-        } else {
-            lines.push(`${indent}${indexPrefix}<${node.tagName}${attrStr}${scrollStr}>${text}`);
-            lines.push(...childLines);
-            lines.push(`${indent}</${node.tagName}>`);
-        }
 
-        return lines.join('\n');
-    }
+            return lines.join('\n');
+        }
 
     /** Decide if a node should be collapsed (its tag removed, children promoted) */
     private shouldCollapse(node: DOMTreeNode): boolean {
@@ -329,6 +388,18 @@ export class DOMExtractor {
     private cleanText(text: string): string {
         return text.replace(/\s+/g, ' ').trim();
     }
+    /** Recursively gather all text from a node and its descendants */
+    private gatherAllText(node: DOMTreeNode): string {
+        const parts: string[] = [];
+        const text = (node.textContent || '').trim();
+        if (text) parts.push(text);
+        for (const child of node.children) {
+            const childText = this.gatherAllText(child);
+            if (childText) parts.push(childText);
+        }
+        return parts.join(' ').replace(/\s+/g, ' ').trim();
+    }
+
 
     private formatScrollInfo(info: NonNullable<DOMTreeNode['scrollInfo']>): string {
         return `${info.pagesAbove}↑ ${info.pagesBelow}↓ ${info.scrollPercent}%`;

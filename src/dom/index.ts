@@ -1,4 +1,5 @@
 export { DOMExtractor } from './extractor';
+export { injectTags, removeTags } from './tagging';
 export type {
     RawDOMNode, DOMTreeNode, SelectorMapEntry,
     DOMExtractionResult, BoundingBox, ScrollInfo,
